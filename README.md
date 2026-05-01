@@ -6,6 +6,7 @@ A realistic, hands-on Web Application Firewall simulation for learning intrusion
 
 ## Project Structure
 
+```
 sentinelshield/
 ├── app.py               ← Flask app: routes, WAF middleware, API
 ├── detector.py          ← Core detection engine (rules + rate limiter)
@@ -16,6 +17,7 @@ sentinelshield/
 ├── logs/
 │   └── sentinelshield.log  ← Auto-created on first run
 └── README.md
+```
 
 ---
 
@@ -23,13 +25,15 @@ sentinelshield/
 
 ### 1. Install dependencies
 
-   bash
+```bash
 pip install -r requirements.txt
+```
 
 ### 2. Run the app
 
-   bash
+```bash
 python app.py
+```
 
 App starts at: **http://127.0.0.1:5000**
 
@@ -57,49 +61,49 @@ Visit **http://127.0.0.1:5000/dashboard** in your browser.
 ## Testing with curl
 
 ### Normal request (should be ALLOWED)
-   bash
+```bash
 curl "http://127.0.0.1:5000/test?user=student&page=home"
-
+```
 
 ### SQL Injection (should be BLOCKED)
-   bash
+```bash
 curl "http://127.0.0.1:5000/test?user=admin%27+OR+%271%27%3D%271"
-
+```
 
 ### XSS Attack (should be BLOCKED)
-   bash
+```bash
 curl "http://127.0.0.1:5000/test?q=%3Cscript%3Ealert(1)%3C/script%3E"
-
+```
 
 ### LFI / Path Traversal (should be BLOCKED)
-   bash
+```bash
 curl "http://127.0.0.1:5000/test?file=../../../../etc/passwd"
-
+```
 
 ### Command Injection (should be BLOCKED)
-   bash
+```bash
 curl "http://127.0.0.1:5000/test?cmd=ls+-la+|+cat+/etc/passwd"
-
+```
 
 ### POST with malicious body
-   bash
+```bash
 curl -X POST http://127.0.0.1:5000/test \
   -d "username=admin'--&password=x"
-
+```
 
 ### Simulate brute-force (rate limit triggers after 20 req/30s)
-   bash
+```bash
 for i in {1..25}; do
   curl -s "http://127.0.0.1:5000/test?login=attempt$i" > /dev/null
 done
-
+```
 
 ### Simulate a custom request via JSON
-   bash
+```bash
 curl -X POST http://127.0.0.1:5000/simulate \
   -H "Content-Type: application/json" \
   -d '{"ip":"10.0.0.1","method":"POST","path":"/login","body":"username=admin OR 1=1"}'
-
+```
 
 ---
 
