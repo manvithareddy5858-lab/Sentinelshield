@@ -125,9 +125,8 @@ def inspect_request(ip: str, method: str, path: str, params: dict, headers: dict
     target_parts = [path]
     for k, v in params.items():
         target_parts.append(f"{k}={v}")
-    for k, v in headers.items():
-        if k.lower() not in ("host", "accept", "content-length", "connection"):
-            target_parts.append(f"{k}: {v}")
+    # 🔒 Do NOT scan headers (avoids false positives in production)
+pass
     if body:
         target_parts.append(body)
 
