@@ -27,10 +27,6 @@ def get_ip():
 
 @app.route("/test", methods=["GET", "POST"])
 def waf_test():
-    """
-    Main WAF inspection endpoint.
-    Students submit requests here to see detection in action.
-    """
     ip = get_ip()
     method = request.method
     path = request.full_path or "/"
@@ -39,8 +35,6 @@ def waf_test():
     body = request.get_data(as_text=True) or ""
 
     result = inspect_request(ip, method, path, params, headers, body)
-
-    # Log every request
     write_log(result)
 
     if result["allowed"]:
@@ -70,10 +64,6 @@ def waf_test():
 
 @app.route("/simulate", methods=["POST"])
 def simulate():
-    """
-    Accepts a JSON body describing a simulated request.
-    Used by the dashboard's simulation panel.
-    """
     data = request.get_json(force=True) or {}
     ip = data.get("ip", "10.0.0.1")
     method = data.get("method", "GET")
@@ -114,32 +104,25 @@ def api_clear():
 
 @app.route("/api/seed", methods=["POST"])
 def api_seed():
-    """Inject realistic demo attack logs for dashboard testing."""
     demo_requests = [
-        # SQL Injection attempts
         ("192.168.1.10", "GET", "/login", {"user": "admin' OR '1'='1", "pass": "x"}, {}, ""),
         ("192.168.1.10", "GET", "/search", {"q": "1 UNION SELECT username,password FROM users--"}, {}, ""),
         ("10.0.0.55",    "POST", "/login", {}, {}, "username=admin'--&password=x"),
         ("10.0.0.55",    "GET", "/products", {"id": "1; DROP TABLE products--"}, {}, ""),
-        # XSS attempts
         ("172.16.0.4",   "GET", "/comment", {"msg": "<script>alert('XSS')</script>"}, {}, ""),
         ("172.16.0.4",   "GET", "/search",  {"q": "<img src=x onerror=document.cookie>"}, {}, ""),
         ("203.0.113.5",  "POST", "/feedback",{}, {}, "text=<svg onload=alert(1)>"),
-        # LFI / Path Traversal
         ("10.10.10.1",   "GET", "/file",    {"name": "../../../../etc/passwd"}, {}, ""),
         ("10.10.10.1",   "GET", "/include", {"page": "php://filter/convert.base64-encode/resource=index.php"}, {}, ""),
-        # Command Injection
         ("45.33.32.156",  "GET", "/ping",   {"host": "127.0.0.1; cat /etc/passwd"}, {}, ""),
         ("45.33.32.156",  "GET", "/exec",   {"cmd": "ls -la | grep passwd"}, {}, ""),
         ("45.33.32.156",  "GET", "/exec",   {"cmd": "`whoami`"}, {}, ""),
-        # Normal requests
         ("192.168.1.50",  "GET", "/home",   {}, {}, ""),
         ("192.168.1.51",  "GET", "/about",  {}, {}, ""),
         ("192.168.1.52",  "POST", "/login", {}, {}, "username=student&password=pass123"),
         ("192.168.1.53",  "GET", "/products",{"id": "42"}, {}, ""),
     ]
 
-    # Simulate brute-force from one IP
     for i in range(25):
         demo_requests.append(("99.88.77.66", "POST", "/login", {}, {}, f"username=admin&password=attempt{i}"))
 
