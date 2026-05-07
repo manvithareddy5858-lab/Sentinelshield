@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinelShield — Intrusion Detection System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── reset + base ───────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --accent:   #58a6ff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --orange:   #e3702a;
+    --purple:   #a371f7;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --radius:   8px;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── header ─────────────────────────────────────────────── */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header-logo { font-size: 22px; }
+  .header h1 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+  .header-sub { font-size: 12px; color: var(--muted); }
+  .badge {
+    margin-left: auto;
+    background: rgba(63,185,80,.15);
+    color: var(--green);
+    border: 1px solid rgba(63,185,80,.3);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .5px;
+  }
+  .header-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all .15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { background: #79c0ff; }
+  .btn.danger { border-color: rgba(248,81,73,.4); color: var(--red); }
+  .btn.danger:hover { background: rgba(248,81,73,.1); }
+
+  /* ── main layout ─────────────────────────────────────────── */
+  .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── stat cards ──────────────────────────────────────────── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+  .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red   { color: var(--red); }
+  .stat-value.blue  { color: var(--accent); }
+  .stat-value.orange{ color: var(--orange); }
+
+  /* ── chart row ───────────────────────────────────────────── */
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ── bottom row ──────────────────────────────────────────── */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  /* ── log table ───────────────────────────────────────────── */
+  .log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .log-count { font-size: 12px; color: var(--muted); }
+  .log-filters { display: flex; gap: 6px; }
+  .filter-btn {
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .filter-btn.active, .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    position: sticky; top: 0;
+    background: var(--bg);
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  td { padding: 7px 10px; border-bottom: 1px solid rgba(48,54,61,.5); vertical-align: middle; }
+  tr:hover td { background: rgba(88,166,255,.04); }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── severity pills ──────────────────────────────────────── */
+  .sev {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .4px;
+  }
+  .sev-CLEAN    { background: rgba(63,185,80,.15);  color: var(--green);  }
+  .sev-LOW      { background: rgba(210,153,34,.15); color: var(--yellow); }
+  .sev-MEDIUM   { background: rgba(88,166,255,.15); color: var(--accent); }
+  .sev-HIGH     { background: rgba(227,112,42,.15); color: var(--orange); }
+  .sev-CRITICAL { background: rgba(248,81,73,.15);  color: var(--red);    }
+
+  .threat-tag {
+    display: inline-block;
+    background: rgba(163,113,247,.15);
+    color: var(--purple);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    margin: 1px;
+  }
+
+  /* ── top IPs panel ───────────────────────────────────────── */
+  .ip-list { list-style: none; }
+  .ip-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(48,54,61,.5);
+    font-size: 12px;
+  }
+  .ip-item:last-child { border-bottom: none; }
+  .ip-bar-wrap { flex: 1; background: rgba(48,54,61,.5); border-radius: 3px; height: 5px; overflow: hidden; }
+  .ip-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width .4s; }
+  .ip-count { color: var(--muted); font-size: 11px; min-width: 24px; text-align: right; }
+
+  /* ── simulator panel ─────────────────────────────────────── */
+  .sim-section { margin-bottom: 20px; }
+  .sim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .preset-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .form-group { margin-bottom: 10px; }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .4px; }
+  input, select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 60px; }
+  select option { background: var(--surface); }
+
+  .sim-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+  .sim-result {
+    display: none;
+    margin-top: 14px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .sim-result.show { display: block; }
+  .result-header {
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .result-header.green { background: rgba(63,185,80,.15); color: var(--green); }
+  .result-header.red   { background: rgba(248,81,73,.15); color: var(--red); }
+  .result-json {
+    background: var(--bg);
+    padding: 12px 14px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  /* ── curl examples panel ─────────────────────────────────── */
+  .curl-section { margin-bottom: 20px; }
+  .curl-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .curl-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .curl-card-title { font-size: 11px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+  .curl-code {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: #79c0ff;
+    background: none;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ── toast ───────────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all .25s;
+    z-index: 9999;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── footer ──────────────────────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 900px) {
+    .stat-grid { grid-template-columns: repeat(3, 1fr); }
+    .chart-row, .bottom-row, .sim-grid, .curl-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────── -->
+<header class="header">
+  <span class="header-logo">🛡</span>
+  <div>
+    <h1>SentinelShield</h1>
+    <div class="header-sub">Advanced Intrusion Detection &amp; Web Protection</div>
+  </div>
+  <span class="badge">WAF ACTIVE — MONITORING</span>
+  <div class="header-actions">
+    <button class="btn primary" onclick="seedData()">⚡ Seed Demo Data</button>
+    <button class="btn" onclick="refreshAll()">↺ Refresh</button>
+    <button class="btn danger" onclick="clearAllLogs()">✕ Clear Logs</button>
+    <button class="btn" onclick="exportCSV()">↓ Export CSV</button>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ── Stat Cards ─────────────────────────────────────────── -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Requests</div>
+      <div class="stat-value blue" id="stat-total">0</div>
+      <div class="stat-sub">all inspected traffic</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Blocked</div>
+      <div class="stat-value red" id="stat-blocked">0</div>
+      <div class="stat-sub">malicious / rate-limited</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Allowed</div>
+      <div class="stat-value green" id="stat-allowed">0</div>
+      <div class="stat-sub">clean traffic passed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Detection Rate</div>
+      <div class="stat-value orange" id="stat-rate">0%</div>
+      <div class="stat-sub">% of traffic blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Unique IPs</div>
+      <div class="stat-value" id="stat-ips">0</div>
+      <div class="stat-sub">distinct sources seen</div>
+    </div>
+  </div>
+
+  <!-- ── Charts ─────────────────────────────────────────────── -->
+  <div class="chart-row">
+    <div class="panel">
+      <div class="panel-title">⬡ Attack Distribution by Category</div>
+      <div class="chart-wrap"><canvas id="chartAttack"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">⬡ Severity Breakdown</div>
+      <div class="chart-wrap"><canvas id="chartSev"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── Log Table + Top IPs ───────────────────────────────── -->
+  <div class="bottom-row">
+    <div class="panel">
+      <div class="log-header">
+        <div class="panel-title" style="margin:0">▶ Live Event Log <span class="log-count" id="log-count">0 entries</span></div>
+        <div class="log-filters">
+          <button class="filter-btn active" onclick="setFilter('ALL', this)">ALL</button>
+          <button class="filter-btn" onclick="setFilter('CRITICAL', this)">CRITICAL</button>
+          <button class="filter-btn" onclick="setFilter('HIGH', this)">HIGH</button>
+          <button class="filter-btn" onclick="setFilter('MEDIUM', this)">MEDIUM</button>
+          <button class="filter-btn" onclick="setFilter('CLEAN', this)">CLEAN</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th><th>IP</th><th>Method</th>
+              <th>Path</th><th>Threats</th><th>Severity</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">⬡ Top Source IPs</div>
+      <ul class="ip-list" id="ip-list">
+        <li style="color:var(--muted);font-size:12px;padding:8px 0">
+          Click ⚡ Seed Demo Data to populate.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Request Simulator ─────────────────────────────────── -->
+  <div class="sim-section panel">
+    <div class="panel-title">⚙ Request Simulator — Test Payloads Against WAF</div>
+
+    <div class="preset-row">
+      <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px">Quick Payload Presets:</span>
+      <button class="preset-btn" onclick="loadPreset('clean')">Normal GET</button>
+      <button class="preset-btn" onclick="loadPreset('sqli1')">SQLi – OR bypass</button>
+      <button class="preset-btn" onclick="loadPreset('sqli2')">SQLi – UNION SELECT</button>
+      <button class="preset-btn" onclick="loadPreset('xss1')">XSS – script tag</button>
+      <button class="preset-btn" onclick="loadPreset('xss2')">XSS – onerror</button>
+      <button class="preset-btn" onclick="loadPreset('lfi1')">LFI – /etc/passwd</button>
+      <button class="preset-btn" onclick="loadPreset('lfi2')">LFI – php://filter</button>
+      <button class="preset-btn" onclick="loadPreset('cmd1')">CMD – cat /etc/passwd</button>
+      <button class="preset-btn" onclick="loadPreset('cmd2')">CMD – backtick exec</button>
+      <button class="preset-btn" onclick="runBruteForce()">Brute Force (5x)</button>
+    </div>
+
+    <div class="sim-grid">
+      <div>
+        <div class="form-group">
+          <label>Source IP</label>
+          <input id="sim-ip" type="text" value="10.0.0.1" placeholder="e.g. 192.168.1.10">
+        </div>
+        <div class="form-group">
+          <label>HTTP Method</label>
+          <select id="sim-method">
+            <option>GET</option><option>POST</option>
+            <option>PUT</option><option>DELETE</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Path</label>
+          <input id="sim-path" type="text" value="/" placeholder="e.g. /login">
+        </div>
+      </div>
+      <div>
+        <div class="form-group">
+          <label>Query Params (key=value, one per line)</label>
+          <textarea id="sim-params" placeholder="user=admin&#10;page=1"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Request Body</label>
+          <textarea id="sim-body" placeholder="username=admin&password=test"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="sim-actions">
+      <button class="btn primary" onclick="runSimulation()">▶ Inspect Request</button>
+      <button class="btn" onclick="clearSimResult()">✕ Clear</button>
+    </div>
+
+    <div class="sim-result" id="sim-result">
+      <div class="result-header" id="sim-result-header"></div>
+      <pre class="result-json" id="sim-result-json"></pre>
+    </div>
+  </div>
+
+  <!-- ── curl Examples ─────────────────────────────────────── -->
+  <div class="curl-section panel" style="margin-bottom:20px">
+    <div class="panel-title">⌨ Testing via curl — Example Commands</div>
+    <div class="curl-grid">
+      <div class="curl-card">
+        <div class="curl-card-title">Clean request (should be ALLOWED)</div>
+        <pre class="curl-code">curl "http://127.0.0.1:5000/test?id=42"</pre>
+      </div>
+      <div class="curl-card">
+        <div class="curl-card-title">SQL Injection (should be BLOCKED)</div>
+        <pre class="curl-code">curl "http://127.0.0.1:5000/test?user=admin'+OR+'1'='1"</pre>
+      </div>
+      <div class="curl-card">
+        <div class="curl-card-title">XSS payload (should be BLOCKED)</div>
+        <pre class="curl-code">curl "http://127.0.0.1:5000/test?q=%3Cscript%3Ealert(1)%3C/script%3E"</pre>
+      </div>
+      <div class="curl-card">
+        <div class="curl-card-title">LFI – path traversal (should be BLOCKED)</div>
+        <pre class="curl-code">curl "http://127.0.0.1:5000/test?page=../../../../etc/passwd"</pre>
+      </div>
+      <div class="curl-card">
+        <div class="curl-card-title">Command injection (should be BLOCKED)</div>
+        <pre class="curl-code">curl "http://127.0.0.1:5000/test?host=127.0.0.1;+cat+/etc/passwd"</pre>
+      </div>
+      <div class="curl-card">
+        <div class="curl-card-title">JSON simulate endpoint</div>
+        <pre class="curl-code">curl -X POST http://127.0.0.1:5000/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"ip":"10.0.0.1","method":"GET",
+       "path":"/search",
+       "params":{"q":"UNION SELECT * FROM users"},
+       "body":""}'</pre>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .main -->
+
+<footer>
+  SentinelShield v1.0 — Intrusion Detection &amp; Web Application Firewall Simulator
+  &nbsp;|&nbsp; Practical Work Documentation
+  &nbsp;|&nbsp; <a href="https://github.com/manvithareddy5858-lab/Sentinelshield" target="_blank" style="color:var(--accent)">GitHub Repository</a>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── In-memory log + rate limiter state ───────────────────────
+var _logs   = [];
+var _buckets = {};   // ip -> [timestamp ms]
+
+var RATE_LIMIT    = 20;
+var RATE_WINDOW   = 30000;   // 30 s in ms
+var _activeFilter = 'ALL';
+
+// ── Toast helper ─────────────────────────────────────────────
+function toast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+
+// ── Rate limiter ──────────────────────────────────────────────
+function checkRate(ip) {
+  var now = Date.now();
+  if (!_buckets[ip]) _buckets[ip] = [];
+  _buckets[ip] = _buckets[ip].filter(function(t) { return now - t < RATE_WINDOW; });
+  _buckets[ip].push(now);
+  var count = _buckets[ip].length;
+  return { exceeded: count > RATE_LIMIT, count: count, limit: RATE_LIMIT, window: 30 };
+}
+
+// ── Attack signatures ─────────────────────────────────────────
+var RULES = {
+  SQL_INJECTION: [
+    /('|%27).*(or|and|union|select|insert|update|delete|drop|--|%2D%2D)/i,
+    /(union(\s|\+)+select)/i,
+    /(select.+from)/i,
+    /(insert\s+into|update\s+\w+\s+set|delete\s+from|drop\s+table)/i,
+    /(;\s*(drop|alter|truncate|exec|execute))/i,
+    /(1\s*=\s*1|'\s*or\s*')/i,
+    /(--\s*$|#\s*$)/i,
+    /(%27|%22|%3D|%3B)/i
+  ],
+  XSS: [
+    /(<\s*script.*?>)/i,
+    /(javascript\s*:)/i,
+    /(on\w+\s*=\s*['"].*?['"])/i,
+    /(<\s*iframe.*?>)/i,
+    /(<\s*img[^>]+src\s*=\s*['"]javascript)/i,
+    /(document\.(cookie|write|location))/i,
+    /(window\.(location|open))/i,
+    /(<\s*svg.*?on\w+\s*=)/i,
+    /(%3Cscript|%3C\/script%3E)/i
+  ],
+  LFI: [
+    /(\.\.|\.\.%2F|%2e%2e%2f)/i,
+    /(\/etc\/passwd|\/etc\/shadow|\/proc\/self)/i,
+    /(boot\.ini|win\.ini|system32)/i,
+    /(php:\/\/|file:\/\/|data:\/\/|expect:\/\/)/i,
+    /(include\s*\(|require\s*\()/i
+  ],
+  COMMAND_INJECTION: [
+    /(;\s*(ls|cat|pwd|id|whoami|uname|wget|curl|chmod|rm|nc|bash|sh)(\s|$|;|\|))/i,
+    /(\|\s*(ls|cat|id|whoami|bash|sh|python|perl))/i,
+    /(`[^`]*`)/,
+    /(\$\([^)]*\))/,
+    /(&&\s*(ls|cat|id|whoami|rm|wget|curl))/i,
+    /(\/bin\/bash|\/bin\/sh|\/usr\/bin\/python)/i
+  ],
+  DIRECTORY_TRAVERSAL: [
+    /(\.\.\/)(.*(\.\.\/)){1,}/,
+    /(%2e%2e%2f){2,}/i,
+    /(%252e%252e%252f)/i,
+    /(\.\.\\\\|\.\.\/)/,
+    /(\/\.\.\/\.\.\/)/
+  ]
+};
+
+// ── Core inspect function ─────────────────────────────────────
+function inspectRequest(ip, method, path, params, body) {
+  // Build unified inspection string
+  var parts = [path];
+  if (params && typeof params === 'object') {
+    Object.keys(params).forEach(function(k) { parts.push(k + '=' + params[k]); });
+  }
+  if (body) parts.push(body);
+  var content = parts.join(' ');
+
+  var threats = [];
+  var matched = [];
+
+  Object.keys(RULES).forEach(function(cat) {
+    RULES[cat].forEach(function(re) {
+      var m = re.exec(content);
+      if (m && threats.indexOf(cat) === -1) {
+        threats.push(cat);
+        matched.push(m[0].substring(0, 60));
+      }
+    });
+  });
+
+  var rl = checkRate(ip);
+
+  var severity;
+  if (rl.exceeded && threats.length) severity = 'CRITICAL';
+  else if (threats.length >= 2)      severity = 'HIGH';
+  else if (threats.length === 1)     severity = 'MEDIUM';
+  else if (rl.exceeded)              severity = 'LOW';
+  else                               severity = 'CLEAN';
+
+  return {
+    allowed:          severity === 'CLEAN',
+    threats:          threats,
+    matched_patterns: matched,
+    rate_limit:       rl,
+    severity:         severity,
+    timestamp:        new Date().toISOString(),
+    ip:               ip,
+    method:           method,
+    path:             path
+  };
+}
+
+// ── Add log entry ─────────────────────────────────────────────
+function addLog(result) {
+  _logs.push(result);
+  if (_logs.length > 2000) _logs.shift();
+}
+
+// ── Filter ────────────────────────────────────────────────────
+function setFilter(f, btn) {
+  _activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderTable();
+}
+
+// ── Render stats ──────────────────────────────────────────────
+function renderStats() {
+  var total   = _logs.length;
+  var blocked = _logs.filter(function(e) { return !e.allowed; }).length;
+  var allowed = total - blocked;
+  var ips     = {};
+  _logs.forEach(function(e) { ips[e.ip] = (ips[e.ip] || 0) + 1; });
+
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-blocked').textContent = blocked;
+  document.getElementById('stat-allowed').textContent = allowed;
+  document.getElementById('stat-rate').textContent    = total ? (blocked / total * 100).toFixed(1) + '%' : '0%';
+  document.getElementById('stat-ips').textContent     = Object.keys(ips).length;
+}
+
+// ── Chart instances ────────────────────────────────────────────
+var _chartAttack = null;
+var _chartSev    = null;
+
+function renderCharts() {
+  // Attack distribution
+  var cats   = ['SQL_INJECTION','XSS','LFI','COMMAND_INJECTION','DIRECTORY_TRAVERSAL'];
+  var labels = ['SQL Injection','XSS','LFI','Cmd Injection','Dir Traversal'];
+  var counts = cats.map(function(c) {
+    return _logs.filter(function(e) { return e.threats.indexOf(c) !== -1; }).length;
+  });
+
+  if (_chartAttack) {
+    _chartAttack.data.datasets[0].data = counts;
+    _chartAttack.update();
+  } else {
+    _chartAttack = new Chart(document.getElementById('chartAttack'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Detections',
+          data: counts,
+          backgroundColor: ['#f85149','#e3702a','#d29922','#a371f7','#58a6ff'],
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,.4)' } },
+          y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,.4)' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Severity breakdown
+  var sevKeys = ['CLEAN','LOW','MEDIUM','HIGH','CRITICAL'];
+  var sevData = sevKeys.map(function(s) {
+    return _logs.filter(function(e) { return e.severity === s; }).length;
+  });
+
+  if (_chartSev) {
+    _chartSev.data.datasets[0].data = sevData;
+    _chartSev.update();
+  } else {
+    _chartSev = new Chart(document.getElementById('chartSev'), {
+      type: 'doughnut',
+      data: {
+        labels: sevKeys,
+        datasets: [{
+          data: sevData,
+          backgroundColor: ['#3fb950','#d29922','#58a6ff','#e3702a','#f85149'],
+          borderWidth: 2,
+          borderColor: '#161b22'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12, padding: 10 }
+          }
+        }
+      }
+    });
+  }
+}
+
+// ── Render table ──────────────────────────────────────────────
+function renderTable() {
+  var filtered = _activeFilter === 'ALL'
+    ? _logs.slice()
+    : _logs.filter(function(e) { return e.severity === _activeFilter; });
+
+  filtered.reverse();
+
+  var tbody = document.getElementById('log-tbody');
+  tbody.innerHTML = '';
+  document.getElementById('log-count').textContent = filtered.length + ' entries';
+
+  filtered.forEach(function(e) {
+    var ts    = e.timestamp ? e.timestamp.replace('T',' ').substring(0,19) : '—';
+    var tags  = e.threats.map(function(t) { return '<span class="threat-tag">' + t + '</span>'; }).join('');
+    var sev   = '<span class="sev sev-' + e.severity + '">' + e.severity + '</span>';
+    var row   = document.createElement('tr');
+    row.innerHTML = '<td>' + ts + '</td>'
+      + '<td style="font-family:monospace;font-size:11px">' + e.ip + '</td>'
+      + '<td>' + (e.method || 'GET') + '</td>'
+      + '<td style="font-family:monospace;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (e.path || '/') + '</td>'
+      + '<td>' + (tags || '<span style="color:var(--muted)">—</span>') + '</td>'
+      + '<td>' + sev + '</td>';
+    tbody.appendChild(row);
+  });
+}
+
+// ── Render top IPs ────────────────────────────────────────────
+function renderIPs() {
+  var ips = {};
+  _logs.forEach(function(e) { ips[e.ip] = (ips[e.ip] || 0) + 1; });
+  var sorted = Object.keys(ips).sort(function(a,b) { return ips[b] - ips[a]; }).slice(0, 8);
+  var max    = sorted.length ? ips[sorted[0]] : 1;
+  var ul     = document.getElementById('ip-list');
+  ul.innerHTML = '';
+
+  if (!sorted.length) {
+    ul.innerHTML = '<li style="color:var(--muted);font-size:12px;padding:8px 0">No data yet.</li>';
+    return;
+  }
+
+  sorted.forEach(function(ip) {
+    var pct = Math.round(ips[ip] / max * 100);
+    var li  = document.createElement('li');
+    li.className = 'ip-item';
+    li.innerHTML = '<span style="font-family:monospace;font-size:11px;min-width:110px">' + ip + '</span>'
+      + '<div class="ip-bar-wrap"><div class="ip-bar" style="width:' + pct + '%"></div></div>'
+      + '<span class="ip-count">' + ips[ip] + '</span>';
+    ul.appendChild(li);
+  });
+}
+
+// ── Refresh all UI ────────────────────────────────────────────
+function refreshAll() {
+  renderStats();
+  renderCharts();
+  renderTable();
+  renderIPs();
+}
+
+// ── Presets ───────────────────────────────────────────────────
+var PRESETS = {
+  clean: { ip:'192.168.1.50', method:'GET',  path:'/home',    params:'',                                 body:'' },
+  sqli1: { ip:'10.0.0.55',    method:'GET',  path:'/login',   params:"user=admin' OR '1'='1\npass=x",   body:'' },
+  sqli2: { ip:'10.0.0.55',    method:'GET',  path:'/search',  params:'q=1 UNION SELECT username,password FROM users--', body:'' },
+  xss1:  { ip:'172.16.0.4',   method:'GET',  path:'/comment', params:"msg=<script>alert('XSS')</script>",body:'' },
+  xss2:  { ip:'172.16.0.4',   method:'GET',  path:'/search',  params:'q=<img src=x onerror=document.cookie>', body:'' },
+  lfi1:  { ip:'10.10.10.1',   method:'GET',  path:'/file',    params:'name=../../../../etc/passwd',      body:'' },
+  lfi2:  { ip:'10.10.10.1',   method:'GET',  path:'/include', params:'page=php://filter/convert.base64-encode/resource=index', body:'' },
+  cmd1:  { ip:'45.33.32.156', method:'GET',  path:'/ping',    params:'host=127.0.0.1; cat /etc/passwd',  body:'' },
+  cmd2:  { ip:'45.33.32.156', method:'GET',  path:'/exec',    params:'cmd=`whoami`',                     body:'' },
+  brute: { ip:'99.88.77.66',  method:'POST', path:'/login',   params:'',                                 body:'username=admin&password=test123' }
+};
+
+function loadPreset(key) {
+  var p = PRESETS[key];
+  if (!p) return;
+  document.getElementById('sim-ip').value     = p.ip;
+  document.getElementById('sim-method').value = p.method;
+  document.getElementById('sim-path').value   = p.path;
+  document.getElementById('sim-params').value = p.params;
+  document.getElementById('sim-body').value   = p.body;
+  clearSimResult();
+}
+
+// ── Parse param string → object ───────────────────────────────
+function parseParams(raw) {
+  var obj = {};
+  if (!raw.trim()) return obj;
+  raw.split('\n').forEach(function(line) {
+    var idx = line.indexOf('=');
+    if (idx > 0) obj[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
+  });
+  return obj;
+}
+
+// ── Run single simulation ─────────────────────────────────────
+function runSimulation() {
+  var ip     = document.getElementById('sim-ip').value.trim()   || '10.0.0.1';
+  var method = document.getElementById('sim-method').value;
+  var path   = document.getElementById('sim-path').value.trim() || '/';
+  var params = parseParams(document.getElementById('sim-params').value);
+  var body   = document.getElementById('sim-body').value.trim();
+
+  var result = inspectRequest(ip, method, path, params, body);
+  addLog(result);
+
+  var el     = document.getElementById('sim-result');
+  var header = document.getElementById('sim-result-header');
+  var jsonEl = document.getElementById('sim-result-json');
+  el.className = 'sim-result show';
+  header.className = 'result-header ' + (result.allowed ? 'green' : 'red');
+  header.textContent = result.allowed
+    ? '✅ ALLOWED — Request passed inspection'
+    : '🚫 BLOCKED — Malicious request detected';
+  jsonEl.textContent = JSON.stringify(result, null, 2);
+  refreshAll();
+}
+
+// ── Brute force simulation — loops 5 requests with small delay ─
+function runBruteForce() {
+  loadPreset('brute');
+  toast('🔁 Sending 5 brute-force login attempts...');
+  var count = 0;
+  function sendNext() {
+    if (count >= 5) {
+      toast('✅ Brute force simulation done — check severity in log');
+      refreshAll();
+      return;
+    }
+    var result = inspectRequest('99.88.77.66','POST','/login',{},
+      'username=admin&password=attempt' + (count + 1));
+    addLog(result);
+    count++;
+    setTimeout(sendNext, 300);
+  }
+  sendNext();
+}
+
+function clearSimResult() {
+  document.getElementById('sim-result').className = 'sim-result';
+}
+
+// ── Seed demo data ─────────────────────────────────────────────
+function seedData() {
+  toast('⚡ Seeding demo attack data...');
+  var demo = [
+    ['192.168.1.10','GET', '/login',    {"user":"admin' OR '1'='1","pass":"x"},   ''],
+    ['192.168.1.10','GET', '/search',   {"q":"1 UNION SELECT username,password FROM users--"}, ''],
+    ['10.0.0.55',   'POST','/login',    {},  "username=admin'--&password=x"],
+    ['10.0.0.55',   'GET', '/products', {"id":"1; DROP TABLE products--"}, ''],
+    ['172.16.0.4',  'GET', '/comment',  {"msg":"<script>alert('XSS')</script>"}, ''],
+    ['172.16.0.4',  'GET', '/search',   {"q":"<img src=x onerror=document.cookie>"}, ''],
+    ['203.0.113.5', 'POST','/feedback', {},  "text=<svg onload=alert(1)>"],
+    ['10.10.10.1',  'GET', '/file',     {"name":"../../../../etc/passwd"}, ''],
+    ['10.10.10.1',  'GET', '/include',  {"page":"php://filter/convert.base64-encode/resource=index.php"}, ''],
+    ['45.33.32.156','GET', '/ping',     {"host":"127.0.0.1; cat /etc/passwd"}, ''],
+    ['45.33.32.156','GET', '/exec',     {"cmd":"ls -la | grep passwd"}, ''],
+    ['45.33.32.156','GET', '/exec',     {"cmd":"`whoami`"}, ''],
+    ['192.168.1.50','GET', '/home',     {}, ''],
+    ['192.168.1.51','GET', '/about',    {}, ''],
+    ['192.168.1.52','POST','/login',    {}, "username=student&password=pass123"],
+    ['192.168.1.53','GET', '/products', {"id":"42"}, '']
+  ];
+
+  for (var i = 0; i < 25; i++) {
+    demo.push(['99.88.77.66','POST','/login', {}, 'username=admin&password=attempt' + i]);
+  }
+
+  demo.forEach(function(d) {
+    addLog(inspectRequest(d[0], d[1], d[2], d[3], d[4]));
+  });
+
+  refreshAll();
+  toast('✅ Demo data loaded — dashboard is now populated!');
+}
+
+// ── Clear all ─────────────────────────────────────────────────
+function clearAllLogs() {
+  if (!confirm('Clear all log data?')) return;
+  _logs = [];
+  _buckets = {};
+  refreshAll();
+  toast('🗑 Logs cleared.');
+}
+
+// ── CSV Export ────────────────────────────────────────────────
+function exportCSV() {
+  if (!_logs.length) { toast('No data to export.'); return; }
+  var rows = [['Timestamp','IP','Method','Path','Severity','Threats','Allowed','Rate_Count']];
+  _logs.forEach(function(e) {
+    rows.push([
+      e.timestamp, e.ip, e.method || 'GET', e.path,
+      e.severity,
+      '"' + e.threats.join(';') + '"',
+      e.allowed,
+      e.rate_limit ? e.rate_limit.count : ''
+    ]);
+  });
+  var csv = rows.map(function(r) { return r.join(','); }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sentinelshield_log.csv';
+  a.click();
+  toast('✅ Log exported as CSV');
+}
+
+// ── Boot: auto-seed then render ───────────────────────────────
+// Using DOMContentLoaded so charts render correctly every time
+document.addEventListener('DOMContentLoaded', function() {
+  seedData();
+  setInterval(refreshAll, 10000);
+});
+</script>
+</body>
+</html>
