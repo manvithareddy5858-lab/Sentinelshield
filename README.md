@@ -1,6 +1,33 @@
-# SentinelShield — WAF Intrusion Detection System
+# SentinelShield — Intrusion Detection & Web Application Firewall
 
-A realistic, hands-on Web Application Firewall simulation for learning intrusion detection, request inspection, and alert generation.
+A lightweight, realistic Web Application Firewall (WAF) simulator built for practical cybersecurity learning. SentinelShield inspects HTTP requests, detects attack signatures, monitors traffic patterns, logs events, and visualises everything through a real-time dashboard.
+
+**Live Demo:** https://sentinelshield-1-r14u.onrender.com
+
+---
+
+## What It Does
+
+SentinelShield mimics the core behaviour of a production WAF. Every request that passes through it is:
+
+1. Disassembled into URL path, query parameters, headers, and body
+2. Scanned against a library of regex-based attack signatures
+3. Checked against a rate limiter (sliding 30-second window per IP)
+4. Classified with a severity level (CLEAN → LOW → MEDIUM → HIGH → CRITICAL)
+5. Logged as a structured JSON entry
+6. Reflected immediately on the live dashboard
+
+---
+
+## Attack Categories Detected
+
+| Category | Example Payload |
+|---|---|
+| SQL Injection | `admin' OR '1'='1`, `UNION SELECT username FROM users--` |
+| Cross-Site Scripting | `<script>alert(1)</script>`, `<img onerror=document.cookie>` |
+| Local File Inclusion | `../../../../etc/passwd`, `php://filter/convert.base64-encode/...` |
+| Command Injection | `; cat /etc/passwd`, `` `whoami` ``, `$(uname -a)` |
+| Directory Traversal | `../../../`, `%2e%2e%2f%2e%2e%2f`, double-encoded variants |
 
 ---
 
@@ -8,159 +35,107 @@ A realistic, hands-on Web Application Firewall simulation for learning intrusion
 
 ```
 sentinelshield/
-├── app.py               ← Flask app: routes, WAF middleware, API
-├── detector.py          ← Core detection engine (rules + rate limiter)
-├── logger.py            ← Structured JSON logger + stats
-├── requirements.txt     ← Python dependencies
-├── templates/
-│   └── dashboard.html   ← Full interactive dashboard UI
-├── logs/
-│   └── sentinelshield.log  ← Auto-created on first run
-└── README.md
+├── app.py              # Flask app — routes, WAF middleware, API endpoints
+├── detector.py         # Detection engine — regex rules + rate limiter
+├── logger.py           # In-memory log store + statistics aggregator
+├── requirements.txt    # Python dependencies
+└── templates/
+    └── dashboard.html  # Real-time monitoring dashboard (HTML/JS/CSS)
 ```
 
 ---
 
-## Setup & Running
-
-### 1. Install dependencies
+## Running Locally
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/manvithareddy5858-lab/Sentinelshield.git
+cd Sentinelshield
+
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-### 2. Run the app
-
-```bash
+# 3. Start the server
 python app.py
+
+# 4. Open the dashboard
+# Navigate to http://127.0.0.1:5000 in your browser
 ```
-
-App starts at: **https://sentinelshield-1-r14u.onrender.com**
-
-### 3. Open the dashboard
-
-Visit **https://sentinelshield-1-r14u.onrender.com/dashboard** in your browser.
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint       | Description                                          |
-|--------|----------------|------------------------------------------------------|
-| GET    | `/dashboard`   | Main UI dashboard                                    |
-| GET    | `/test`        | WAF inspection endpoint (GET with params)            |
-| POST   | `/test`        | WAF inspection endpoint (POST with body)             |
-| POST   | `/simulate`    | Simulate a request via JSON body                     |
-| GET    | `/api/logs`    | Fetch recent log entries (`?limit=N`)                |
-| GET    | `/api/stats`   | Aggregate statistics (threat counts, top IPs, etc.)  |
-| POST   | `/api/seed`    | Inject demo attack data for testing                  |
-| POST   | `/api/clear`   | Clear all logs                                       |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Real-time monitoring dashboard |
+| `/test` | GET / POST | WAF inspection endpoint — submit any request here |
+| `/simulate` | POST | JSON-based simulation endpoint used by the dashboard |
+| `/api/logs` | GET | Returns the last N log entries as JSON |
+| `/api/stats` | GET | Aggregate statistics — totals, threat counts, top IPs |
+| `/api/seed` | POST | Injects demo attack data for dashboard testing |
+| `/api/clear` | POST | Clears all log entries |
 
----
+### Example — Testing with curl
 
-## Testing with curl
-
-### Normal request (should be ALLOWED)
 ```bash
-curl "https://sentinelshield-1-r14u.onrender.com/test?user=student&page=home"
-```
+# Clean request (should be ALLOWED)
+curl "http://127.0.0.1:5000/test?id=42"
 
-### SQL Injection (should be BLOCKED)
-```bash
-curl "https://sentinelshield-1-r14u.onrender.com/test?user=admin%27+OR+%271%27%3D%271"
-```
+# SQL Injection (should be BLOCKED)
+curl "http://127.0.0.1:5000/test?user=admin'+OR+'1'='1"
 
-### XSS Attack (should be BLOCKED)
-```bash
-curl "https://sentinelshield-1-r14u.onrender.com/test?q=%3Cscript%3Ealert(1)%3C/script%3E"
-```
+# XSS payload
+curl "http://127.0.0.1:5000/test?q=<script>alert(1)</script>"
 
-### LFI / Path Traversal (should be BLOCKED)
-```bash
-curl "https://sentinelshield-1-r14u.onrender.com/test?file=../../../../etc/passwd"
-```
+# LFI / path traversal
+curl "http://127.0.0.1:5000/test?page=../../../../etc/passwd"
 
-### Command Injection (should be BLOCKED)
-```bash
-curl "https://sentinelshield-1-r14u.onrender.com/test?cmd=ls+-la+|+cat+/etc/passwd"
-```
+# Command injection
+curl "http://127.0.0.1:5000/test?host=127.0.0.1;+cat+/etc/passwd"
 
-### POST with malicious body
-```bash
-curl -X POST https://sentinelshield-1-r14u.onrender.com/test \
-  -d "username=admin'--&password=x"
-```
-
-### Simulate brute-force (rate limit triggers after 20 req/30s)
-```bash
-for i in {1..25}; do
-  curl -s "https://sentinelshield-1-r14u.onrender.com/test?login=attempt$i" > /dev/null
-done
-```
-
-### Simulate a custom request via JSON
-```bash
-curl -X POST https://sentinelshield-1-r14u.onrender.com/simulate \
+# Simulate via JSON
+curl -X POST http://127.0.0.1:5000/simulate \
   -H "Content-Type: application/json" \
-  -d '{"ip":"10.0.0.1","method":"POST","path":"/login","body":"username=admin OR 1=1"}'
+  -d '{"ip":"10.0.0.1","method":"GET","path":"/search","params":{"q":"1 UNION SELECT * FROM users"},"body":""}'
 ```
 
 ---
 
-## Detection Rules
+## Rate Limiting
 
-| Category             | Examples Detected                                              |
-|----------------------|----------------------------------------------------------------|
-| SQL_INJECTION        | `' OR '1'='1`, `UNION SELECT`, `DROP TABLE`, encoded variants |
-| XSS                  | `<script>`, `onerror=`, `javascript:`, `<svg onload=`         |
-| LFI                  | `../../../`, `php://filter`, `/etc/passwd`, `boot.ini`        |
-| COMMAND_INJECTION    | `; cat`, `| whoami`, backtick execution, `$()` subshell       |
-| DIRECTORY_TRAVERSAL  | `../../`, double-encoded `%252e%252e`, Windows-style `..\\`   |
+The rate limiter tracks request counts per source IP using a sliding time window:
+
+- **Threshold:** 20 requests per 30-second window
+- **Scope:** Per IP address
+- **Effect:** Exceeding the threshold sets severity to LOW (no threats) or CRITICAL (threats present)
 
 ---
 
 ## Severity Levels
 
-| Severity | Condition                              | Action  |
-|----------|----------------------------------------|---------|
-| CLEAN    | No threats, no rate limit exceeded     | ALLOWED |
-| LOW      | Rate limit exceeded, no threats        | BLOCKED |
-| MEDIUM   | 1 threat category detected             | BLOCKED |
-| HIGH     | 2+ threat categories detected          | BLOCKED |
-| CRITICAL | Rate limit exceeded AND threats found  | BLOCKED |
+| Level | Condition |
+|---|---|
+| CLEAN | No threats detected, rate limit not exceeded |
+| LOW | Rate limit exceeded, no attack signatures matched |
+| MEDIUM | One attack category detected |
+| HIGH | Two or more attack categories detected simultaneously |
+| CRITICAL | Attack signatures detected AND rate limit exceeded |
 
 ---
 
-## Dashboard Features
+## Deployment
 
-- **Live stat cards** — Total requests, blocked, allowed, detection rate
-- **Severity donut chart** — Visual breakdown by severity level
-- **Threat category bars** — Which attack types are most common
-- **Top offending IPs** — Ranked by request count with visual bar
-- **Request simulator** — Send test payloads directly from the UI
-- **Quick payload buttons** — One-click SQL, XSS, LFI, Cmd, Clean payloads
-- **Filterable log table** — Filter by All / Critical / High / Medium / Blocked
-- **Seed demo data** — Instantly populate with realistic attack scenarios
-- **Auto-refresh** — Dashboard updates every 10 seconds
+The project is deployed on **Render** (free tier). The `gunicorn` WSGI server is used in production as specified in `requirements.txt`. Logs are stored in memory (in-memory store bounded to 2,000 entries) with a best-effort disk write to `logs/sentinelshield.log`.
+
+> Note: Render's free tier spins down after inactivity. The first request after a sleep period may take 30–60 seconds to respond.
 
 ---
 
-## How Detection Works
+## Technologies Used
 
-1. Incoming request → `inspect_request()` in `detector.py`
-2. All parts (URL, params, headers, body) joined into one string
-3. Each of the 5 rule categories checked using compiled regex patterns
-4. Rate limiter checks the source IP against a 30-second sliding window
-5. Severity calculated from threat count + rate limit status
-6. Result logged via `write_log()` in `logger.py`
-7. Response returned: `200 ALLOWED` or `403 BLOCKED`
-
----
-
-## Practical Exercise Suggestions
-
-1. Add a new rule category (e.g. `SSRF`, `XXE`, `OPEN_REDIRECT`)
-2. Tune the rate limiter threshold and observe behavior
-3. Test URL-encoded payloads and see if they bypass detection
-4. Add a custom header-based detection rule
-5. Export the log file and analyze it in Excel/Python
+- **Python 3.10+** — backend runtime
+- **Flask 2.3+** — HTTP request handling and routing
+- **Gunicorn 21+** — production WSGI server
+- **Chart.js 4.4.1** — dashboard visualisations
+- **HTML5 / CSS3 / Vanilla JS** — frontend dashboard
