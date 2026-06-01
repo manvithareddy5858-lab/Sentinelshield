@@ -188,4 +188,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     # debug=True only when running locally, never on Render
     debug = os.environ.get("FLASK_ENV", "production") != "production"
-    app.run(debug=debug, host="0.0.0.0", port=port)
+    import os
+port = int(os.environ.get("PORT", 5000))
+app.run(debug=False, host="0.0.0.0", port=port)
