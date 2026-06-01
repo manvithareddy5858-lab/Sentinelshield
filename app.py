@@ -137,6 +137,10 @@ def simulate():
     result = inspect_request(ip, method, path, params, headers, body)
     write_log(result)
     return jsonify(result)
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "service": "SentinelShield"}), 200
  
  
 # ─────────────────────────────────────────────
